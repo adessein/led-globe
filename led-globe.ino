@@ -15,26 +15,31 @@
 #define NUM_LEDS    4
 #define UPDATES_PER_SECOND 100
 #define DELTA_BRIGHT 10
+#define DELTA_WP 5
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, LED_PIN, NEO_GRBW + NEO_KHZ800);
 
-uint32_t color;
 uint8_t brightness;
 
 IRrecv irrecv(IR_PIN);
 decode_results results, old_results;
 
+uint32_t Wheel(byte WheelPos);
+byte wp;
+
 void setup() {
   Serial.begin(115200);
+
+  wp = 0;
     
   irrecv.enableIRIn();  // Start the receiver
   
   // Initialize all pixels to white
-  color = strip.Color(0, 0, 0, 255);
   brightness = 255;
   strip.begin();
   strip.setBrightness(brightness);
-  for(uint16_t i=0; i<strip.numPixels(); i++) strip.setPixelColor(i, color);
+  for(uint16_t i=0; i<strip.numPixels(); i++) 
+    strip.setPixelColor(i, 0, 0, 0, 255);
   strip.show();
 
   while (!Serial) delay(50); // Wait for the serial connection to be establised.
@@ -58,16 +63,22 @@ void loop() {
     switch(results.value)
     {
       case 0xFFA25D: // 1
-        color = strip.Color(255, 0, 0, 0);
+        wp = 0; // Red
         break;
       case 0xFF629D: // 2
-        color = strip.Color(0, 255, 0, 0);
+        wp = 85; // Green
         break;
       case 0xFFE21D: // 3
-        color = strip.Color(0, 0, 255, 0);
+        wp = 170; // Blue
         break;
       case 0xFF9867: // 0
         brightness = 0;
+        break;
+      case 0xFF10EF: // LEFT
+        wp = max(0, wp - DELTA_WP);
+        break;
+      case 0xFF5AA5: // RIGHT
+        wp = min(255, wp + DELTA_WP);
         break;
       case 0xFF18E7: // UP
         brightness = min(255, brightness + DELTA_BRIGHT);
@@ -77,7 +88,7 @@ void loop() {
         break;
     }
 
-    for(uint16_t i=0; i<strip.numPixels(); i++) strip.setPixelColor(i, color);
+    for(uint16_t i=0; i<strip.numPixels(); i++) strip.setPixelColor(i, Wheel(wp));
     strip.setBrightness(brightness);
     serialPrintUint64(results.value, HEX);
     Serial.println("");
@@ -85,4 +96,17 @@ void loop() {
   }
   strip.show();
   delay(50);
+}
+
+uint32_t Wheel(byte WheelPos) {
+  WheelPos = 255 - WheelPos;
+  if(WheelPos < 85) {
+    return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
+  }
+  if(WheelPos < 170) {
+    WheelPos -= 85;
+    return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
+  }
+  WheelPos -= 170;
+  return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
 }
