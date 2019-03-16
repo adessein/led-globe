@@ -19,17 +19,19 @@
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, LED_PIN, NEO_GRBW + NEO_KHZ800);
 
-uint8_t brightness;
+uint8_t brightness, step;
 
 IRrecv irrecv(IR_PIN);
 decode_results results, old_results;
 
 uint32_t Wheel(byte WheelPos);
-byte wp;
+byte wp, mode;
 
 void setup() {
   Serial.begin(115200);
 
+  step = 0;
+  mode = 0;
   wp = 0;
     
   irrecv.enableIRIn();  // Start the receiver
@@ -63,37 +65,87 @@ void loop() {
     switch(results.value)
     {
       case 0xFFA25D: // 1
+        mode = 0;
         wp = 0; // Red
         break;
       case 0xFF629D: // 2
+        mode = 0;
         wp = 85; // Green
         break;
       case 0xFFE21D: // 3
+        mode = 0;
         wp = 170; // Blue
         break;
+      case 0xFF22DD: // 4
+        break;
+      case 0xFF02FD: // 5
+        break;
+      case 0xFFC23D: // 6
+        break;
+      case 0xFFE01F: // 7
+        break;
+      case 0xFFA857: // 8
+        mode = 0;
+        wp = 235; // Pink
+        break;
+      case 0xFF906F: // 9
+        break;
       case 0xFF9867: // 0
+        mode = 0;
         brightness = 0;
         break;
+      case 0xFF6897: // *
+        mode = 1;
+        step = 0;
+        break;
+      case 0xFFB04F: // #
+        mode = 2;
+        step = 0;
+        break;
       case 0xFF10EF: // LEFT
-        wp = max(0, wp - DELTA_WP);
+        // Decrease value
+        if(mode != 1)
+          wp = max(0, wp - DELTA_WP);
         break;
       case 0xFF5AA5: // RIGHT
-        wp = min(255, wp + DELTA_WP);
+        // Increase value
+        if(mode != 1)
+          wp = min(255, wp + DELTA_WP);
         break;
       case 0xFF18E7: // UP
-        brightness = min(255, brightness + DELTA_BRIGHT);
+        // Increase brightness
+        if(mode != 2)
+          brightness = min(255, brightness + DELTA_BRIGHT);
         break;
       case 0xFF4AB5: // DN
-        brightness = max(0, brightness - DELTA_BRIGHT);
+        // Decrease brightness
+        if(mode != 2)
+          brightness = max(0, brightness - DELTA_BRIGHT);
+        break;
+      case 0xFF38C7: // OK
         break;
     }
 
-    for(uint16_t i=0; i<strip.numPixels(); i++) strip.setPixelColor(i, Wheel(wp));
-    strip.setBrightness(brightness);
     serialPrintUint64(results.value, HEX);
     Serial.println("");
+    Serial.println(wp);
     irrecv.resume();  // Receive the next value 
   }
+  
+  if(mode==1)
+  {
+    // Rainbow (color sine)
+    wp = strip.sine8(step++);
+  }
+  
+  if(mode==2)
+  {
+    // Brightness sine
+    brightness = strip.sine8(step++);
+  }
+  
+  for(uint16_t i=0; i<strip.numPixels(); i++) strip.setPixelColor(i, Wheel(wp));
+  strip.setBrightness(brightness);
   strip.show();
   delay(50);
 }
