@@ -5,17 +5,36 @@
  * Controls a strip of 4 Neo Pixel GRBW LEDs with and a ESP8266
  */
 
-#include <IRremoteESP8266.h>
+#include <IRremoteESP8266.h> // https://github.com/crankyoldgit/IRremoteESP8266
 #include <IRrecv.h>
 #include <IRutils.h>
-#include <Adafruit_NeoPixel.h>
+#include <Adafruit_NeoPixel.h> // https://github.com/adafruit/Adafruit_NeoPixel
+#include <UniversalTelegramBot.h> // https://github.com/witnessmenow/Universal-Arduino-Telegram-Bot/tree/V1.2.0
+#include <ESP8266WiFi.h>
+#include <WiFiClientSecure.h> // SSL is required for Telegram
 
-#define IR_PIN     13
-#define LED_PIN     2
+#include "credentials.h"
+/* The file credentials.h contains:
+#define BOT_TOKEN "XXXX:XXXX"  // your Bot Token (Get from Botfather)
+#define CHAT_ID "XXXX" // Chat ID of where you want the message to go (You can use MyIdBot to get the chat ID)
+#define WIFI_SSID "XXXX"
+#define WIFI_PASS "XXXX"
+*/
+
+#define IR_PIN     13 // D7
+#define LED_PIN     2  
 #define NUM_LEDS    4
 #define UPDATES_PER_SECOND 100
 #define DELTA_BRIGHT 10
 #define DELTA_WP 5
+
+// SSL client needed for both libraries
+WiFiClientSecure client;
+
+// ------- Telegram config --------
+UniversalTelegramBot bot(BOT_TOKEN, client);
+unsigned long lastTelegram, elapsedTime;
+void sendTelegramMessage();
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, LED_PIN, NEO_GRBW + NEO_KHZ800);
 
@@ -33,6 +52,8 @@ void setup() {
   step = 0;
   mode = 0;
   wp = 0;
+
+  lastTelegram = 0L;
     
   irrecv.enableIRIn();  // Start the receiver
   
@@ -48,6 +69,28 @@ void setup() {
   Serial.println();
   Serial.print("IRrecvDemo is now running and waiting for IR message on Pin ");
   Serial.println(IR_PIN);
+
+    // Set WiFi to station mode and disconnect from an AP if it was Previously
+  // connected
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  delay(100);
+
+  // Attempt to connect to Wifi network:
+  Serial.print("Connecting Wifi: ");
+  Serial.println(WIFI_SSID);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print("[");
+    Serial.print(WiFi.status());
+    Serial.print("]");
+    delay(1000);
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  IPAddress ip = WiFi.localIP();
+  Serial.println(ip);
 }
 
 void loop() {
@@ -79,6 +122,16 @@ void loop() {
       case 0xFF22DD: // 4
         break;
       case 0xFF02FD: // 5
+        elapsedTime = millis() - lastTelegram;
+        if (elapsedTime > 10000L)
+        {
+          sendTelegramMessage(); // Max one message a minute
+        }
+        else
+        {
+          Serial.println("Too eraly to telegram");
+          Serial.println(elapsedTime);
+        }
         break;
       case 0xFFC23D: // 6
         break;
@@ -148,6 +201,21 @@ void loop() {
   strip.setBrightness(brightness);
   strip.show();
   delay(50);
+}
+
+void sendTelegramMessage() {
+  Serial.println("sendTelegramMessage");
+  String message = "Message de Louis\n";
+  if(bot.sendSimpleMessage(CHAT_ID, message, ""))
+  {
+    Serial.println("TELEGRAM Successfully sent");
+    lastTelegram = millis();
+  }
+  else
+  {
+    Serial.println("ERROR while sending TELEGRAM");
+  }
+  
 }
 
 uint32_t Wheel(byte WheelPos) {
